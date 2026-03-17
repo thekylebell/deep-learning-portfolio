@@ -1,0 +1,56 @@
+##Versions
+#'main' - original implementation'
+#'v2-improvements' - updated model with callbacks EarlyStopping for early stopping
+#when the model stops improving, and ReduceLROnPlateau to automatically shrink
+#the learning rate to help the model carefully fine-tune its way into higher accuracy.
+
+from keras import models, layers, optimizers
+from keras.callbacks import EarlyStopping, ReduceLROnPlateau
+
+# 1. Slightly gentler augmentation
+data_augmentation = models.Sequential([
+    layers.RandomFlip("horizontal"),
+    layers.RandomRotation(0.05), # Reduced from 0.1 for more stability
+    layers.RandomZoom(0.05),     # Reduced from 0.1
+])
+
+model = models.Sequential()
+model.add(layers.Input(shape=(32,32,3)))
+model.add(data_augmentation)
+
+# --- Block 1: Increased filters ---
+model.add(layers.Conv2D(32, (3,3), activation='relu', padding='same')) # 16 -> 32
+model.add(layers.BatchNormalization())
+model.add(layers.Conv2D(64, (3,3), activation='relu', padding='same')) # 32 -> 64
+model.add(layers.BatchNormalization())
+model.add(layers.MaxPooling2D((2,2)))
+model.add(layers.Dropout(0.2))
+
+# --- Block 2: More capacity ---
+model.add(layers.Conv2D(128, (3,3), activation='relu', padding='same')) # 64 -> 128
+model.add(layers.BatchNormalization())
+model.add(layers.Conv2D(256, (3,3), activation='relu', padding='same')) # 128 -> 256
+model.add(layers.BatchNormalization())
+model.add(layers.MaxPooling2D((2,2)))
+model.add(layers.Dropout(0.3))
+
+# --- Classifier ---
+model.add(layers.Flatten())
+model.add(layers.Dense(512, activation='relu')) # Doubled from 256
+model.add(layers.BatchNormalization())
+model.add(layers.Dropout(0.5)) # Increased to handle larger layer
+model.add(layers.Dense(10, activation='softmax'))
+
+# 2. Compilation
+opt = optimizers.AdamW(learning_rate=0.001, weight_decay=0.01)
+model.compile(optimizer=opt, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# 3. The Callbacks
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, min_lr=1e-6)
+early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+
+  %%time
+epochs = 40
+batch_size = 64
+
+history = model.fit(X_train_norm, y_train, epochs=epochs, batch_size=batch_size, validation_split=0.1, callbacks=[early_stop, reduce_lr])
