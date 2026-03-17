@@ -1,0 +1,7 @@
+#Libraries used
+keras
+tensorflow
+numpy
+matplotlib
+pandas
+scikit-learn
